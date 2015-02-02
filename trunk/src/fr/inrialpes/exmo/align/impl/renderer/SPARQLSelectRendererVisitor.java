@@ -53,6 +53,7 @@ public class SPARQLSelectRendererVisitor extends GraphPatternRendererVisitor imp
     boolean oneway = false;
     boolean split = false;
     String splitdir = "";
+    private String onto1NamedGraph, onto2NamedGraph = null;
 
     boolean edoal = false;
 
@@ -60,6 +61,12 @@ public class SPARQLSelectRendererVisitor extends GraphPatternRendererVisitor imp
 
     public SPARQLSelectRendererVisitor(PrintWriter writer) {
         super(writer);
+    }
+
+    public SPARQLSelectRendererVisitor(PrintWriter writer, String onto1NamedGraph, String onto2NamedGraph) {
+        super(writer);
+        this.onto1NamedGraph = onto1NamedGraph;
+        this.onto2NamedGraph = onto2NamedGraph;
     }
 
     public void init(Properties p) {
@@ -138,21 +145,21 @@ public class SPARQLSelectRendererVisitor extends GraphPatternRendererVisitor imp
     }
 
     protected void resetS1(String obj) {
-        if(fromOnto1ToOnto2){
-            resetVariables("?s1", obj); 
-        }else{
+        if (fromOnto1ToOnto2) {
+            resetVariables("?s1", obj);
+        } else {
             resetVariables("?s2", obj);
         }
     }
 
     protected void resetS2(String obj) {
-        if(fromOnto1ToOnto2){
-            resetVariables("?s2", obj); 
-        }else{
+        if (fromOnto1ToOnto2) {
+            resetVariables("?s2", obj);
+        } else {
             resetVariables("?s1", obj);
         }
     }
-    
+
     /**
      * Where each element must be equal
      *
@@ -163,34 +170,50 @@ public class SPARQLSelectRendererVisitor extends GraphPatternRendererVisitor imp
         //Main part for selection
         resetS1("?o1");
         Expression expr1 = linkkeyEquals.getExpression1();
+        beginNamedGraph(onto1NamedGraph);
         expr1.accept(this);
+        endNamedGraph(onto1NamedGraph);
         resetS2("?o1");
         Expression expr2 = linkkeyEquals.getExpression2();
+        beginNamedGraph(onto2NamedGraph);
         expr2.accept(this);
+        endNamedGraph(onto2NamedGraph);
         //First part 
         addToGP("MINUS { " + NL);
         resetS1("?o1");
+        beginNamedGraph(onto1NamedGraph);
         expr1.accept(this);
         resetS1("?o2");
         expr1.accept(this);
+        endNamedGraph(onto1NamedGraph);
         resetS2("?o1");
+        beginNamedGraph(onto2NamedGraph);
         expr2.accept(this);
+        endNamedGraph(onto2NamedGraph);
         addToGP("FILTER(?s1 != ?s2 && ?o2 != ?o1 && NOT EXISTS {" + NL);
         resetS2("?o2");
+        beginNamedGraph(onto2NamedGraph);
         expr2.accept(this);
+        endNamedGraph(onto2NamedGraph);
         addToGP("}) " + NL);
         addToGP("} " + NL);
         //Second part
         addToGP("MINUS {" + NL);
         resetS1("?o1");
+        beginNamedGraph(onto1NamedGraph);
         expr1.accept(this);
+        endNamedGraph(onto1NamedGraph);
         resetS2("?o1");
+        beginNamedGraph(onto2NamedGraph);
         expr2.accept(this);
         resetS2("?o2");
         expr2.accept(this);
+        endNamedGraph(onto2NamedGraph);
         addToGP("FILTER(?s1 != ?s2 && ?o1 != ?o2 && NOT EXISTS {" + NL);
         resetS1("?o2");
+        beginNamedGraph(onto1NamedGraph);
         expr1.accept(this);
+        endNamedGraph(onto1NamedGraph);
         addToGP("}) " + NL);
         addToGP("} " + NL);
     }
@@ -204,10 +227,14 @@ public class SPARQLSelectRendererVisitor extends GraphPatternRendererVisitor imp
     public void visit(final LinkkeyIntersects linkkeyIntersects) throws AlignmentException {
         resetS1("?o1");
         Expression expr1 = linkkeyIntersects.getExpression1();
+        beginNamedGraph(onto1NamedGraph);
         expr1.accept(this);
+        endNamedGraph(onto1NamedGraph);
         resetS2("?o1");
         Expression expr2 = linkkeyIntersects.getExpression2();
+        beginNamedGraph(onto2NamedGraph);
         expr2.accept(this);
+        endNamedGraph(onto2NamedGraph);
     }
 
     protected void generateSelect(Cell cell, Expression expr1, Expression expr2, boolean from1To2) throws AlignmentException {
@@ -221,14 +248,18 @@ public class SPARQLSelectRendererVisitor extends GraphPatternRendererVisitor imp
         } else {
             resetVariables(expr1, "s2", "o");
         }
+        beginNamedGraph(onto1NamedGraph);
         expr1.accept(this);
+        endNamedGraph(onto1NamedGraph);
         listGP.add(getGP());
         if (from1To2) {
             resetVariables(expr2, "s2", "o");
         } else {
             resetVariables(expr2, "s1", "o");
         }
+        beginNamedGraph(onto2NamedGraph);
         expr2.accept(this);
+        endNamedGraph(onto2NamedGraph);
         listGP.add(getGP());
         initStructure();
         String filter = "FILTER(?s1 != ?s2)";
@@ -238,7 +269,7 @@ public class SPARQLSelectRendererVisitor extends GraphPatternRendererVisitor imp
                 linkkey.accept(this);
             }
             listGP.add(getGP());
-        }      
+        }
         String query = createSelect(listGP, filter);
         if (corese) {
             throw new AlignmentException("corese case NOT IMPLEMENTED for SPARQLSelectRendererVisitor !!");
@@ -247,6 +278,18 @@ public class SPARQLSelectRendererVisitor extends GraphPatternRendererVisitor imp
             return;
         }
         saveQuery(cell, query);
+    }
+
+    protected void beginNamedGraph(String namedGraph) {
+        if (namedGraph != null) {
+            addToGP("GRAPH <" + namedGraph + "> {" + NL);
+        }
+    }
+
+    protected void endNamedGraph(String namedGraph) {
+        if (namedGraph != null) {
+            addToGP("}" + NL);
+        }
     }
 
     protected String createSelect(List<String> listGP, String filter) {
