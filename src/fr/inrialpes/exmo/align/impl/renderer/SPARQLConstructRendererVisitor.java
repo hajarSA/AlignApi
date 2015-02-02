@@ -46,6 +46,8 @@ public class SPARQLConstructRendererVisitor extends GraphPatternRendererVisitor 
     Cell cell = null;
     Hashtable<String, String> nslist = null;
 
+    private String namedGraph = null;
+
     boolean embedded = false;
     boolean oneway = false;
 
@@ -57,6 +59,11 @@ public class SPARQLConstructRendererVisitor extends GraphPatternRendererVisitor 
 
     public SPARQLConstructRendererVisitor(PrintWriter writer) {
         super(writer);
+    }
+
+    public SPARQLConstructRendererVisitor(PrintWriter writer, String namedGraph) {
+        this(writer);
+        this.namedGraph = namedGraph;
     }
 
     /**
@@ -146,13 +153,15 @@ public class SPARQLConstructRendererVisitor extends GraphPatternRendererVisitor 
         // default behaviour
         // rel.write( writer );
     }
+
     public void visit(final Linkkey linkkey) throws AlignmentException {
         throw new AlignmentException("NOT IMPLEMENTED !");
     }
-    
+
     public void visit(final LinkkeyEquals linkkeyEquals) throws AlignmentException {
         throw new AlignmentException("NOT IMPLEMENTED !");
     }
+
     public void visit(final LinkkeyIntersects linkkeyIntersects) throws AlignmentException {
         throw new AlignmentException("NOT IMPLEMENTED !");
     }
@@ -195,12 +204,15 @@ public class SPARQLConstructRendererVisitor extends GraphPatternRendererVisitor 
     }
 
     protected String createConstruct(String GP1, String GP2) {
-        return createPrefixList() + "CONSTRUCT {" + NL + GP1 + "}" + NL + "WHERE {" + NL + GP2  + "}" + NL;
+        if (namedGraph == null) {
+            return createPrefixList() + "CONSTRUCT {" + NL + GP1 + "}" + NL + "WHERE {" + NL + GP2 + "}" + NL;
+        } else {
+            return createPrefixList() + "CONSTRUCT {" + NL + GP1 + "}" + NL + "WHERE {" + NL + "GRAPH <" + namedGraph + "> {"+ NL + GP2 + "}" + NL + "}" + NL;
+        }
     }
 
     protected String createCoreseQuery(String query) {
         return "<rule>" + NL + "<body>" + NL + "<![CDATA[" + NL + query + "]]>" + NL + "</body>" + NL + "</rule>" + NL + NL;
     }
-    
-    
+
 }

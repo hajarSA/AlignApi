@@ -95,6 +95,41 @@ public class SPARQLConstructVisitorTest {
 
         assertEquals(renderer.getQueryFromOnto1ToOnto2(opusCell), expectedQuery1);
         assertEquals(renderer.getQueryFromOnto2ToOnto1(opusCell), expectedQuery2);
+        
+        //With Named Graph
+        String namedGraph = "http://exmo.inrialpes.fr/connectors/one-graph";
+        renderer = new SPARQLConstructRendererVisitor(writer, namedGraph);
+        properties = new Properties();
+        renderer.init(properties);
+        alignment.render(renderer);
+        
+        expectedQuery1 = "PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n"
+                + "PREFIX ns0:<http://exmo.inrialpes.fr/connectors#>\n"
+                + "PREFIX ns1:<http://purl.org/ontology/mo/>\n"
+                + "CONSTRUCT {\n"
+                + "?s ns1:opus ?o .\n"
+                + "}\n"
+                + "WHERE {\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/one-graph> {\n"
+                + "?s ns0:opus ?o .\n"
+                + "}\n"
+                + "}\n";
+
+        expectedQuery2 = "PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n"
+                + "PREFIX ns0:<http://exmo.inrialpes.fr/connectors#>\n"
+                + "PREFIX ns1:<http://purl.org/ontology/mo/>\n"
+                + "CONSTRUCT {\n"
+                + "?s ns0:opus ?o .\n"
+                + "}\n"
+                + "WHERE {\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/one-graph> {\n"
+                + "?s ns1:opus ?o .\n"
+                + "}\n"
+                + "}\n";
+
+        assertEquals(renderer.getQueryFromOnto1ToOnto2(opusCell), expectedQuery1);
+        assertEquals(renderer.getQueryFromOnto2ToOnto1(opusCell), expectedQuery2);
+        
 
         //For remote sparql endpoint : 
 //        String remoteServiceURIName = "http://example.org/remoteSparql";

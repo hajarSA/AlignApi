@@ -17,6 +17,9 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  */
+
+import com.hp.hpl.jena.query.Dataset;
+import com.hp.hpl.jena.query.DatasetFactory;
 import com.hp.hpl.jena.query.Query;
 import com.hp.hpl.jena.query.QueryExecution;
 import com.hp.hpl.jena.query.QueryExecutionFactory;
@@ -34,7 +37,6 @@ import java.util.Properties;
 import org.semanticweb.owl.align.Cell;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
-import static org.testng.Assert.fail;
 import org.testng.annotations.Test;
 
 /**
@@ -166,7 +168,6 @@ public class SPARQLSelectRendererVisitorTest {
 //                + "}\n";
 //        assertEquals(renderer.getQueryFromOnto2ToOnto1(cell2), expectedQuery);
 //    }
-
     @Test(groups = {"full", "impl", "raw"}, dependsOnMethods = {"QueryWithoutLinkkey"})
     public void QueryFromSimpleLinkkeyAndIntersects() throws Exception {
         String alignmentFileName = "people_intersects_alignment.rdf";
@@ -238,6 +239,7 @@ public class SPARQLSelectRendererVisitorTest {
             assertTrue(resultValues.contains(expected));
         }
     }
+
 
     @Test(groups = {"full", "impl", "raw"}, dependsOnMethods = {"QueryWithoutLinkkey", "QueryFromSimpleLinkkeyAndIntersects"})
     public void QueryFromSimpleLinkkeyAndEquals() throws Exception {
@@ -396,6 +398,293 @@ public class SPARQLSelectRendererVisitorTest {
         assertEquals(resultValues.size(), expectedS1.length);
         for (String expected : expectedS1) {
             assertTrue(resultValues.contains(expected));
+        }
+    }
+    
+    @Test(groups = {"full", "impl", "raw"}, dependsOnMethods = {"QueryFromRelationLinkkeyAndIntersects"})
+    public void QueryWithNamedGraphAndIntersectsLinkkey() throws Exception {
+        String alignmentFileName = "people_intersects_alignment.rdf";
+        EDOALAlignment alignment = Utils.loadAlignement(alignmentFileName);
+        StringWriter stringWriter = new StringWriter();
+        PrintWriter writer = new PrintWriter(stringWriter);
+        String onto1NamedGraph = "http://exmo.inrialpes.fr/connectors/onto1-graph";
+        String onto2NamedGraph = "http://exmo.inrialpes.fr/connectors/onto2-graph";
+
+        //With named Graph on onto1 and onto2
+        SPARQLSelectRendererVisitor renderer = new SPARQLSelectRendererVisitor(writer, onto1NamedGraph, onto2NamedGraph);
+        Properties properties = new Properties();
+        renderer.init(properties);
+        alignment.render(renderer);
+        assertEquals(alignment.nbCells(), 1);
+        Enumeration<Cell> cells = alignment.getElements();
+        Cell cell = cells.nextElement();
+
+        String expectedQuery = "PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n"
+                + "PREFIX ns0:<http://exmo.inrialpes.fr/connectors-core/>\n"
+                + "PREFIX ns1:<http://xmlns.com/foaf/0.1/>\n"
+                + "SELECT DISTINCT ?s1 ?s2 \n"
+                + "WHERE {\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto1-graph> {\n"
+                + "?s1 rdf:type ns0:Personne .\n"
+                + "}\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto2-graph> {\n"
+                + "?s2 rdf:type ns1:Person .\n"
+                + "}\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto1-graph> {\n"
+                + "?s1 ns0:nom ?o1 .\n"
+                + "}\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto2-graph> {\n"
+                + "?s2 ns1:givenName ?o1 .\n"
+                + "}\n"
+                + "FILTER(?s1 != ?s2)\n"
+                + "}\n";
+        assertEquals(renderer.getQueryFromOnto1ToOnto2(cell), expectedQuery);
+
+        expectedQuery = "PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n"
+                + "PREFIX ns0:<http://exmo.inrialpes.fr/connectors-core/>\n"
+                + "PREFIX ns1:<http://xmlns.com/foaf/0.1/>\n"
+                + "SELECT DISTINCT ?s1 ?s2 \n"
+                + "WHERE {\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto1-graph> {\n"
+                + "?s2 rdf:type ns0:Personne .\n"
+                + "}\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto2-graph> {\n"
+                + "?s1 rdf:type ns1:Person .\n"
+                + "}\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto1-graph> {\n"
+                + "?s2 ns0:nom ?o1 .\n"
+                + "}\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto2-graph> {\n"
+                + "?s1 ns1:givenName ?o1 .\n"
+                + "}\n"
+                + "FILTER(?s1 != ?s2)\n"
+                + "}\n";
+        assertEquals(renderer.getQueryFromOnto2ToOnto1(cell), expectedQuery);
+
+        //With named Graph only on onto1
+        renderer = new SPARQLSelectRendererVisitor(writer, onto1NamedGraph, null);
+        properties = new Properties();
+        renderer.init(properties);
+        alignment.render(renderer);
+        assertEquals(alignment.nbCells(), 1);
+        cells = alignment.getElements();
+        cell = cells.nextElement();
+
+        expectedQuery = "PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n"
+                + "PREFIX ns0:<http://exmo.inrialpes.fr/connectors-core/>\n"
+                + "PREFIX ns1:<http://xmlns.com/foaf/0.1/>\n"
+                + "SELECT DISTINCT ?s1 ?s2 \n"
+                + "WHERE {\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto1-graph> {\n"
+                + "?s1 rdf:type ns0:Personne .\n"
+                + "}\n"
+                + "?s2 rdf:type ns1:Person .\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto1-graph> {\n"
+                + "?s1 ns0:nom ?o1 .\n"
+                + "}\n"
+                + "?s2 ns1:givenName ?o1 .\n"
+                + "FILTER(?s1 != ?s2)\n"
+                + "}\n";
+        assertEquals(renderer.getQueryFromOnto1ToOnto2(cell), expectedQuery);
+
+        expectedQuery = "PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n"
+                + "PREFIX ns0:<http://exmo.inrialpes.fr/connectors-core/>\n"
+                + "PREFIX ns1:<http://xmlns.com/foaf/0.1/>\n"
+                + "SELECT DISTINCT ?s1 ?s2 \n"
+                + "WHERE {\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto1-graph> {\n"
+                + "?s2 rdf:type ns0:Personne .\n"
+                + "}\n"
+                + "?s1 rdf:type ns1:Person .\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto1-graph> {\n"
+                + "?s2 ns0:nom ?o1 .\n"
+                + "}\n"
+                + "?s1 ns1:givenName ?o1 .\n"
+                + "FILTER(?s1 != ?s2)\n"
+                + "}\n";
+        assertEquals(renderer.getQueryFromOnto2ToOnto1(cell), expectedQuery);
+
+        //With named Graph only on onto2
+        renderer = new SPARQLSelectRendererVisitor(writer, null, onto2NamedGraph);
+        properties = new Properties();
+        renderer.init(properties);
+        alignment.render(renderer);
+        assertEquals(alignment.nbCells(), 1);
+        cells = alignment.getElements();
+        cell = cells.nextElement();
+
+        expectedQuery = "PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n"
+                + "PREFIX ns0:<http://exmo.inrialpes.fr/connectors-core/>\n"
+                + "PREFIX ns1:<http://xmlns.com/foaf/0.1/>\n"
+                + "SELECT DISTINCT ?s1 ?s2 \n"
+                + "WHERE {\n"
+                + "?s1 rdf:type ns0:Personne .\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto2-graph> {\n"
+                + "?s2 rdf:type ns1:Person .\n"
+                + "}\n"
+                + "?s1 ns0:nom ?o1 .\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto2-graph> {\n"
+                + "?s2 ns1:givenName ?o1 .\n"
+                + "}\n"
+                + "FILTER(?s1 != ?s2)\n"
+                + "}\n";
+
+        assertEquals(renderer.getQueryFromOnto1ToOnto2(cell), expectedQuery);
+
+        expectedQuery = "PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n"
+                + "PREFIX ns0:<http://exmo.inrialpes.fr/connectors-core/>\n"
+                + "PREFIX ns1:<http://xmlns.com/foaf/0.1/>\n"
+                + "SELECT DISTINCT ?s1 ?s2 \n"
+                + "WHERE {\n"
+                + "?s2 rdf:type ns0:Personne .\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto2-graph> {\n"
+                + "?s1 rdf:type ns1:Person .\n"
+                + "}\n"
+                + "?s2 ns0:nom ?o1 .\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto2-graph> {\n"
+                + "?s1 ns1:givenName ?o1 .\n"
+                + "}\n"
+                + "FILTER(?s1 != ?s2)\n"
+                + "}\n";
+        assertEquals(renderer.getQueryFromOnto2ToOnto1(cell), expectedQuery);
+        
+        //With Relation        
+        alignmentFileName = "people_relation_intersects_alignment.rdf";
+        alignment = Utils.loadAlignement(alignmentFileName);
+        stringWriter = new StringWriter();
+        writer = new PrintWriter(stringWriter);
+        renderer = new SPARQLSelectRendererVisitor(writer, onto1NamedGraph, onto2NamedGraph);
+        properties = new Properties();
+        renderer.init(properties);
+        alignment.render(renderer);
+
+        assertEquals(alignment.nbCells(), 1);
+        cells = alignment.getElements();
+        cell = cells.nextElement();
+
+        String query = renderer.getQueryFromOnto1ToOnto2(cell);
+        expectedQuery = "PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n"
+                + "PREFIX ns0:<http://exmo.inrialpes.fr/connectors-core/>\n"
+                + "PREFIX ns1:<http://xmlns.com/foaf/0.1/>\n"
+                + "SELECT DISTINCT ?s1 ?s2 \n"
+                + "WHERE {\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto1-graph> {\n"
+                + "?s1 rdf:type ns0:Personne .\n"
+                + "}\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto2-graph> {\n"
+                + "?s2 rdf:type ns1:Person .\n"
+                + "}\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto1-graph> {\n"
+                + "?s1 ns0:connait ?o1 .\n"
+                + "}\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto2-graph> {\n"
+                + "?o2 rdf:type ns1:Person .\n"
+                + "?s2 ns1:knows ?o2 .\n"
+                + "?o2 ns1:givenName ?o1 .\n"
+                + "}\n"
+                + "FILTER(?s1 != ?s2)\n"
+                + "}\n";
+        assertEquals(expectedQuery, query);
+        
+    }
+    
+    
+    @Test(groups = {"full", "impl", "raw"}, dependsOnMethods = {"QueryFromRelationLinkkeyAndIntersects"})
+    public void QueryWithNamedGraphAndEqualsLinkkey() throws Exception {
+        String alignmentFileName = "people_equals_alignment.rdf";
+        EDOALAlignment alignment = Utils.loadAlignement(alignmentFileName);
+        StringWriter stringWriter = new StringWriter();
+        PrintWriter writer = new PrintWriter(stringWriter);
+        String onto1NamedGraph = "http://exmo.inrialpes.fr/connectors/onto1-graph";
+        String onto2NamedGraph = "http://exmo.inrialpes.fr/connectors/onto2-graph";
+
+        //With named Graph on onto1 and onto2
+        SPARQLSelectRendererVisitor renderer = new SPARQLSelectRendererVisitor(writer, onto1NamedGraph, onto2NamedGraph);
+        Properties properties = new Properties();
+        renderer.init(properties);
+        alignment.render(renderer);
+        assertEquals(alignment.nbCells(), 1);
+        Enumeration<Cell> cells = alignment.getElements();
+        Cell cell = cells.nextElement();
+
+        String expectedQuery = "PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n"
+                + "PREFIX ns0:<http://exmo.inrialpes.fr/connectors-core/>\n"
+                + "PREFIX ns1:<http://xmlns.com/foaf/0.1/>\n"
+                + "SELECT DISTINCT ?s1 ?s2 \n"
+                + "WHERE {\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto1-graph> {\n"
+                + "?s1 rdf:type ns0:Personne .\n"
+                + "}\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto2-graph> {\n"
+                + "?s2 rdf:type ns1:Person .\n"
+                + "}\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto1-graph> {\n"
+                + "?s1 ns0:nom ?o1 .\n"
+                + "}\n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto2-graph> {\n"
+                + "?s2 ns1:givenName ?o1 .\n"
+                + "}\n"
+                + "MINUS { \n"
+                + "GRAPH <http://exmo.inrialpes.fr/connectors/onto1-graph> {\n"
+                + "?s1 ns0:nom ?o1 .\n"
+                + "?s1 ns0:nom ?o2 .\n"
+                + "}\n"
+                + "?s2 ns1:givenName ?o1 .\n"
+                + "FILTER(?s1 != ?s2 && ?o2 != ?o1 && NOT EXISTS {\n"
+                + "?s2 ns1:givenName ?o2 .\n"
+                + "}) \n"
+                + "} \n"
+                + "MINUS {\n"
+                + "?s1 ns0:nom ?o1 .\n"
+                + "?s2 ns1:givenName ?o1 .\n"
+                + "?s2 ns1:givenName ?o2 .\n"
+                + "FILTER(?s1 != ?s2 && ?o1 != ?o2 && NOT EXISTS {\n"
+                + "?s1 ns0:nom ?o2 .\n"
+                + "}) \n"
+                + "} \n"
+                + "FILTER(?s1 != ?s2)\n"
+                + "}\n";
+        
+        String query = renderer.getQueryFromOnto1ToOnto2(cell);
+        Dataset dataset = DatasetFactory.createMem();
+        dataset.addNamedModel(onto1NamedGraph, Utils.loadValues(new String[]{"equals_people_1.rdf"}));
+        dataset.addNamedModel(onto2NamedGraph, Utils.loadValues(new String[]{"equals_people_2.rdf"}));
+        Query selectQuery = QueryFactory.create(query);
+        String[] expectedS1 = {
+            "http://exmo.inrialpes.fr/connectors-data/people#alice_c1_1"};
+        String[] expectedS2 = {
+            "http://exmo.inrialpes.fr/connectors-data/people#alice_c1_2",};
+        HashMap<String, Collection<String>> allResultValues = Utils.getResultValues(QueryExecutionFactory.create(selectQuery, dataset).execSelect());
+        Collection<String> resultValues = allResultValues.get("s1");
+        assertEquals(resultValues.size(), expectedS1.length);
+        for (String expected : expectedS1) {
+            assertTrue(resultValues.contains(expected), "For expected : " + expected);
+        }
+
+        resultValues = allResultValues.get("s2");
+        assertEquals(resultValues.size(), expectedS2.length);
+        for (String expected : expectedS2) {
+            assertTrue(resultValues.contains(expected), "For expected : " + expected);
+        }
+
+        //With from onto2ToOnto1
+        query = renderer.getQueryFromOnto2ToOnto1(cell);//Where ?p1 is in onto2
+        dataset = DatasetFactory.createMem();
+        dataset.addNamedModel(onto1NamedGraph, Utils.loadValues(new String[]{"equals_people_1.rdf"}));
+        dataset.addNamedModel(onto2NamedGraph, Utils.loadValues(new String[]{"equals_people_2.rdf"}));
+        selectQuery = QueryFactory.create(query);
+        allResultValues = Utils.getResultValues(QueryExecutionFactory.create(selectQuery, dataset).execSelect());
+
+        resultValues = allResultValues.get("s1");
+        assertEquals(resultValues.size(), expectedS1.length);
+        for (String expected : expectedS2) {//Change here
+            assertTrue(resultValues.contains(expected), "For expected : " + expected);
+        }
+
+        resultValues = allResultValues.get("s2");
+        assertEquals(resultValues.size(), expectedS2.length);
+        for (String expected : expectedS1) {//Change here
+            assertTrue(resultValues.contains(expected), "For expected : " + expected);
         }
     }
 //
