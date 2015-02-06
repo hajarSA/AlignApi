@@ -32,6 +32,7 @@ import java.util.Collection;
 import java.util.Properties;
 import java.util.List;
 import java.util.Set;
+import java.util.Vector;
 import java.util.ArrayList;
 import java.util.Map.Entry;
 import java.util.regex.Pattern;
@@ -623,19 +624,21 @@ public class BasicAlignment implements Alignment, Extensible {
 	}
 	BasicAlignment result = new BasicAlignment();
 	result.init( onto1, onto2 );
-	Hashtable<Object,Hashtable<Object,Set<Cell>>> lcells = new Hashtable<Object,Hashtable<Object,Set<Cell>>>();
+	Hashtable<Object,Hashtable<Object,List<Cell>>> lcells = new Hashtable<Object,Hashtable<Object,List<Cell>>>();
 	// Collect all alignments...
 	logger.debug( "Collect all alignments..." );
 	for ( Alignment al : aligns ) {
+	    //logger.trace(" AL: {}", al );
 	    for ( Cell c : al ) {
-		Hashtable<Object,Set<Cell>> h = lcells.get( c.getObject1() );
+		//logger.trace( "  {} -- {}", c.getObject1(), c.getObject2() );
+		Hashtable<Object,List<Cell>> h = lcells.get( c.getObject1() );
 		if ( h == null ) {
-		    h = new Hashtable<Object,Set<Cell>>();
+		    h = new Hashtable<Object,List<Cell>>();
 		    lcells.put( c.getObject1(), h );
 		}
-		Set<Cell> s = h.get( c.getObject2() );
+		List<Cell> s = h.get( c.getObject2() );
 		if ( s == null ) {
-		    s = new HashSet<Cell>();
+		    s = new Vector<Cell>();
 		    h.put( c.getObject2(), s );
 		}
 		s.add( c );
@@ -643,12 +646,9 @@ public class BasicAlignment implements Alignment, Extensible {
 	}
 	// iterate on all cells
 	logger.debug( "Iterate on all cells" );
-	for ( Hashtable<Object,Set<Cell>> h: lcells.values() ) {
-	    for ( Set<Cell> s: h.values() ) {
+	for ( Hashtable<Object,List<Cell>> h: lcells.values() ) {
+	    for ( List<Cell> s: h.values() ) {
 		Cell cell = s.iterator().next(); // yes dangerous
-		Object o1 = cell.getObject1();
-		Object o2 = cell.getObject2();
-		Relation rel = cell.getRelation(); // This assumes that the relation is the same.
 		// Aggregate them depending on modality
 		double val = 0.;
 		if ( modality.equals("min") ) {
@@ -662,11 +662,10 @@ public class BasicAlignment implements Alignment, Extensible {
 		    for ( Cell c: s ) val += c.getStrength();
 		    val = val/(double)size;
 		} else if ( modality.equals("pool") ) {
-		    int vote = 0;
-		    for ( Cell c: s ) vote++;
-		    val = (double)vote/(double)size;
+		    val = (double)(s.size())/(double)size;
 		}
-		if ( val > 0. ) result.addAlignCell( null, o1, o2, rel, val );
+		// This assumes that the relation is the same.
+		if ( val > 0. ) result.addAlignCell( null, cell.getObject1(), cell.getObject2(), cell.getRelation(), val );
 	    }
 	}
 	return result;
