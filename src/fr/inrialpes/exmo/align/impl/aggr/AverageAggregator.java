@@ -25,6 +25,9 @@ import org.slf4j.LoggerFactory;
 
 import org.semanticweb.owl.align.Cell;
 
+import fr.inrialpes.exmo.align.impl.Annotations;
+import fr.inrialpes.exmo.align.impl.Namespace;
+
 /**
  *
  * @author Jérôme Euzenat
@@ -39,6 +42,7 @@ public class AverageAggregator extends BasicAggregator {
     /** Creation **/
     public AverageAggregator() {
 	super();
+	setExtension( Namespace.EXT.uri, Annotations.METHOD, "fr.inrialpes.exmo.align.impl.aggr.AverageAggregator" );
     }
 
     /**

@@ -624,6 +624,7 @@ public class BasicAlignment implements Alignment, Extensible {
 	}
 	BasicAlignment result = new BasicAlignment();
 	result.init( onto1, onto2 );
+	result.setExtension( Namespace.EXT.uri, Annotations.METHOD, "fr.inrialpes.exmo.align.impl.BasicAlignment#aggregate" );
 	Hashtable<Object,Hashtable<Object,List<Cell>>> lcells = new Hashtable<Object,Hashtable<Object,List<Cell>>>();
 	// Collect all alignments...
 	logger.debug( "Collect all alignments..." );
