@@ -30,25 +30,25 @@ import org.semanticweb.owl.align.Cell;
  * @author Jérôme Euzenat
  * @version $Id$ 
  *
- * Aggregate alignments by recording the proportion of "vote" for each correspondence
+ * Aggregate alignments by recording the proportin of "vote" for each correspondence
  */
 
-public class ConsensusAggregator extends BasicAggregator {
-    final static Logger logger = LoggerFactory.getLogger( ConsensusAggregator.class );
+public class AverageAggregator extends BasicAggregator {
+    final static Logger logger = LoggerFactory.getLogger( AverageAggregator.class );
 
     /** Creation **/
-    public ConsensusAggregator() {
+    public AverageAggregator() {
 	super();
     }
 
     /**
-     * Set the confidence of correspondence in the alignments as the proportion of aggregated 
-     * alignments featuring this correspondence (initial alignment could have trimmed before 
-     * for accounting for their confidence or AverageAggregator could be used).
+     * Set the confidence of correspondence in the alignments as the average of confidence
+     * that they obtained in the aggregated alignments (confidence is 0. if the correspondence
+     * was not there).
      */
     public void extract() {
 	for ( Cell c : this ) {
-	    c.setStrength( (double)count.get( c ).getOccurences() / (double)nbAlignments );
+	    c.setStrength( count.get( c ).getValue() / (double)nbAlignments );
 	}
     }
 
