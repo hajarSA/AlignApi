@@ -121,7 +121,7 @@ public class EvalAlign extends CommonCLI {
 	    System.exit(-1);
 	}
 
-	logger.debug(" Filename: {}/{}", alignName1, alignName2);
+	logger.debug(" Filename: {} --- {}", alignName1, alignName2);
 
 	Alignment align1 = null, align2 = null;
 	try {
@@ -197,6 +197,6 @@ public class EvalAlign extends CommonCLI {
     }
 
     public void usage() {
-	usage( "java "+this.getClass().getName()+" [options] alignURI alignURI\nEvaluate two alignments identified by <alignURI>" );
+	usage( "java "+this.getClass().getName()+" [options] refalignURI alignURI\nEvaluate two alignments identified by <alignURI>" );
     }
 }
