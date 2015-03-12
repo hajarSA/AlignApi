@@ -1,7 +1,7 @@
 /*
  * $Id$
  *
- * Copyright (C) INRIA, 2006-2014
+ * Copyright (C) INRIA, 2006-2015
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -194,25 +194,42 @@ public class VolatilCache implements Cache {
 	return result;
     }
 
+    // Deal with non aligned ontologies
     public Collection<Alignment> alignments( URI u1, URI u2 ) {
-	Collection<Alignment> results = new HashSet<Alignment>();
-	if ( u1 != null ) {
-	    for ( Alignment al : ontologyTable.get( u1 ) ) {
-		try {
-		    //    if ( al.getOntology1URI().equals( u1 ) ) {
-		    if ( u2 == null ) results.add( al );
-		    else if ( al.getOntology2URI().equals( u2 ) 
-			      || al.getOntology1URI().equals( u2 )) results.add( al );
-		    //    }
-		} catch (AlignmentException alex) {
-		    logger.debug( "IGNORED Exception", alex );
+	Collection<Alignment> results = null;
+	if ( u1 == null ) {
+	    if ( u2 == null ) {
+		results = alignmentTable.values();
+	    } else {
+		Set<Alignment> intermediates = ontologyTable.get( u2 );
+		if ( intermediates == null ) {
+		    results = null;
+		} else {
+		    results = new HashSet<Alignment>();
+		    for ( Alignment al : intermediates ) {
+			results.add( al );
+		    }
 		}
 	    }
-	} else if ( u2 != null ) {
-	    for ( Alignment al : ontologyTable.get( u2 ) ) {
-		results.add( al );
+	} else {
+	    Set<Alignment> intermediates = ontologyTable.get( u1 );
+	    if ( intermediates == null ) {
+		results = null;
+	    } else {
+		results = new HashSet<Alignment>();
+		for ( Alignment al : intermediates ) {
+		    try {
+			//    if ( al.getOntology1URI().equals( u1 ) ) {
+			if ( u2 == null ) results.add( al );
+			else if ( al.getOntology2URI().equals( u2 ) 
+				  || al.getOntology1URI().equals( u2 )) results.add( al );
+			//    }
+		    } catch (AlignmentException alex) {
+			logger.debug( "IGNORED Exception", alex );
+		    }
+		}
 	    }
-	} else { results = alignmentTable.values(); }
+	}
 	return results;
     }
 
