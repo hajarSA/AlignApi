@@ -94,7 +94,6 @@ public class SQLCache extends VolatilCache implements Cache {
             // URIINdex:
             ADDED multiple uris for alignments (?)
             CHANGED the alext namespace
-       // EDOAL2015:
        471: ADDED management of EDOAL alignments
      */
 
@@ -136,8 +135,9 @@ public class SQLCache extends VolatilCache implements Cache {
 	super.init( p, prefix );
 	port = p.getProperty("http"); // bad idea
 	host = p.getProperty("host");
+	Statement st = null;
 	try {
-	    Statement st = createStatement();
+	    st = createStatement();
 	    // test if a database is here, otherwise create it
 	    ResultSet rs = conn.getMetaData().getTables(null,null, "server", new String[]{"TABLE"});
 	    if ( !rs.next() ) {
@@ -156,21 +156,28 @@ public class SQLCache extends VolatilCache implements Cache {
 	    registerServer( host, port, rights==1, idprefix );
 	    // load alignment descriptions
 	    load( true );
-	    st.close();
 	} catch (SQLException sqlex) {
 	    throw new AlignmentException( "SQLException", sqlex );
+	} finally {
+	    try {
+		if ( st != null ) st.close();
+	    } catch (SQLException sqlex) {};
 	}
     }
 
     public void close() throws AlignmentException  {
+	Statement st = null;
 	try {
-	    Statement st = createStatement();
+	    st = createStatement();
 	    // unregister by the database
 	    st.executeUpdate( "DELETE FROM server WHERE host='"+host+"' AND port='"+port+"'" );
-	    st.close();
-	    conn.close();
 	} catch (SQLException sqlex) {
 	    throw new AlignmentException( "SQL Exception", sqlex );
+	} finally {
+	    try {
+		if ( st != null ) st.close();
+		if ( conn != null ) conn.close();
+	    } catch (SQLException sqlex) {};
 	}
     }
 
@@ -192,41 +199,45 @@ public class SQLCache extends VolatilCache implements Cache {
 	Alignment alignment = null;
 	OntologyNetwork noo = null;
 	Vector<String> idInfo = new Vector<String>();
-	Statement st = createStatement();
+	
 	
 	if (force) {
 	    // Retrieve the alignment ids
-	    ResultSet rs = st.executeQuery("SELECT id FROM alignment");
-	    while( rs.next() ) {
-		id = rs.getString("id");
-		idInfo.add(id);	
-	    }	    
+	    try ( Statement st = conn.createStatement() ) {
+		    ResultSet rs = st.executeQuery("SELECT id FROM alignment");
+		    while( rs.next() ) {
+			id = rs.getString("id");
+			idInfo.add(id);	
+		    }
+		}
 	    // For each alignment id store metadata
 	    for( int i = 0; i < idInfo.size(); i++ ) {
 		id = idInfo.get(i);
 		alignment = retrieveDescription( id );
 		recordAlignment( recoverAlignmentUri( id ), alignment, true );
 		// URIINdex: load alternative URIs
-		rs = st.executeQuery("SELECT uri,prefered FROM alignmenturis WHERE id="+quote(id)+";");
-		while( rs.next() ) {
-		    alignmentURITable.put( rs.getString("uri"), alignment );
-		}	    
+		try ( Statement st = conn.createStatement() ) {
+			ResultSet rs = st.executeQuery("SELECT uri,prefered FROM alignmenturis WHERE id="+quote(id)+";");
+			while( rs.next() ) {
+			    alignmentURITable.put( rs.getString("uri"), alignment );
+			}	    
+		    }
 	    }
 	    // ONETW: Load ontology networks
 	    idInfo.clear();
-	    rs = st.executeQuery("SELECT id FROM network");
-	    while( rs.next() ) {
-		id = rs.getString("id");
-		idInfo.add(id);	
-	    }
-	    
+	    try ( Statement st = conn.createStatement() ) {
+		    ResultSet rs = st.executeQuery("SELECT id FROM network");
+		    while( rs.next() ) {
+			id = rs.getString("id");
+			idInfo.add(id);	
+		    }
+		}
 	    for( int i = 0; i < idInfo.size(); i++ ) {
 		id = idInfo.get(i);
 		noo = retrieveOntologyNetwork( id );
 		recordNetwork( recoverNetworkUri( id ), noo, true );
 	    }							
 	}
-	st.close();
     }
     
     /**
@@ -247,7 +258,6 @@ public class SQLCache extends VolatilCache implements Cache {
 	    // Get basic ontology metadata
 	    rs = st.executeQuery( "SELECT * FROM alignment WHERE id = '" + id  +"'" );
 	    if ( ! rs.next() ) logger.debug( "IGNORED cannot find retrieve "+id );
-	    // EDOAL2015: detect by 2EDOAL as level (beforehand)
 	    String level = rs.getString("level");
 	    if ( level.contains( "2EDOAL" ) ) {
 		result = new EDOALAlignment();
@@ -335,10 +345,6 @@ public class SQLCache extends VolatilCache implements Cache {
     protected Alignment retrieveAlignment( String uri, Alignment alignment ) throws SQLException, AlignmentException, URISyntaxException {
 	String id = stripAlignmentUri( uri );
 
-	// JE2015 EDOAL
-	//alignment.setOntology1( new URI( alignment.getExtension( SVCNS, OURI1 ) ) );
-	//alignment.setOntology2( new URI( alignment.getExtension( SVCNS, OURI2 ) ) );
-
 	// Get cells
 	Statement st = createStatement();
 	Statement st2 = createStatement();
@@ -353,7 +359,7 @@ public class SQLCache extends VolatilCache implements Cache {
 		URI ent2 = new URI( rs.getString("uri2") );
 		if ( ent1 == null || ent2 == null ) break;
 		cell = ((URIAlignment)alignment).addAlignCell( ent1, ent2, rs.getString("relation"), Double.parseDouble(rs.getString("measure")) );
-	    } else { // EDOAL2015: load the cell
+	    } else { // load the cell
 		esrv = new EDOALSQLCache( service );
 		esrv.init();
 		Object ent1 = esrv.extractExpression( Long.parseLong( rs.getString("uri1") ) );
@@ -366,7 +372,7 @@ public class SQLCache extends VolatilCache implements Cache {
 		if ( !cid.startsWith("##") ) {
 		    cell.setId( cid );
 		}
-		if ( cell instanceof EDOALCell ) { // EDOAL2015: load linkkeys and transformations
+		if ( cell instanceof EDOALCell ) { // load linkkeys and transformations
 		    esrv.extractTransformations( cid, ((EDOALCell)cell) );
 		    esrv.extractLinkkeys( cid, ((EDOALCell)cell) );
 		}
@@ -497,13 +503,13 @@ public class SQLCache extends VolatilCache implements Cache {
     }
 
     // Suppress it from the cache...
-    // EDOAL2015: That will be likely more complex for EDOAL
     public void unstoreAlignment( String uri, Alignment alignment ) throws AlignmentException {
 	try {
-	    Statement st = createStatement();
+	    Statement st = null;
 	    String id = stripAlignmentUri( uri );
 	    try {
 		conn.setAutoCommit( false );
+		st = createStatement();
 		// Delete cell's extensions
 		ResultSet rs = st.executeQuery( "SELECT cell_id FROM cell WHERE id='"+id+"'" );
 		while ( rs.next() ){
@@ -512,7 +518,7 @@ public class SQLCache extends VolatilCache implements Cache {
 			st.executeUpdate( "DELETE FROM extension WHERE id='"+cid+"'" );
 		    }
 		}
-		unstoreEDOALAlignment( id, alignment ); // EDOAL2015
+		unstoreEDOALAlignment( id, alignment ); 
 		st.executeUpdate("DELETE FROM cell WHERE id='"+id+"'");
 		st.executeUpdate("DELETE FROM extension WHERE id='"+id+"'");
 		//ontologies do not depend on alignments
@@ -527,7 +533,7 @@ public class SQLCache extends VolatilCache implements Cache {
 		throw new AlignmentException( "SQL Exception", sex );
 	    } finally {
 		conn.setAutoCommit( false );
-		st.close();
+		if ( st != null ) st.close();
 	    }
 	} catch ( SQLException sex ) {
 	    throw new AlignmentException( "Cannot establish SQL Connexion", sex );
@@ -543,7 +549,6 @@ public class SQLCache extends VolatilCache implements Cache {
 	}
     }
 
-    // EDOAL2015
     public void storeAlignment( String uri ) throws AlignmentException {
 	logger.trace( "Storing alignment "+uri );
 	String query = null;
@@ -614,7 +619,7 @@ public class SQLCache extends VolatilCache implements Cache {
 			    else cellid = "";
 			    logger.trace( "Storing cell: "+cellid );
 			    String uri1, uri2;
-			    if ( c instanceof EDOALCell ) { // EDOAL2015: 
+			    if ( c instanceof EDOALCell ) {
 				uri1 = String.valueOf( esrv.visit( (Expression)((EDOALCell)c).getObject1() ) );
 				uri2 = String.valueOf( esrv.visit( (Expression)((EDOALCell)c).getObject2() ) );
 			    } else {
@@ -647,7 +652,7 @@ public class SQLCache extends VolatilCache implements Cache {
 			}
 			logger.trace( "Stored cell: "+cellid );
 			// Store transformations and linkkeys
-			if ( c instanceof EDOALCell ) { // EDOAL2015: store linkkeys and transformations if any
+			if ( c instanceof EDOALCell ) { // store linkkeys and transformations if any
 			    if ( ((EDOALCell)c).transformations() != null && !((EDOALCell)c).transformations().isEmpty() ) {
 				for ( Transformation transf : ((EDOALCell)c).transformations() ) {
 				    esrv.visit( transf, cellid );
@@ -676,6 +681,7 @@ public class SQLCache extends VolatilCache implements Cache {
 		    conn.rollback(); // seems to work well!
 		    throw new AlignmentException( "SQLException", sqlex );
 		} finally {
+		    if ( st != null ) st.close();
 		    conn.setAutoCommit( true );
 		}
 		break; // succeeded
@@ -784,6 +790,7 @@ public class SQLCache extends VolatilCache implements Cache {
 		    throw new AlignmentException( "SQLException", sqlex );
 		} finally {
 		    conn.setAutoCommit( true );
+		    if ( st != null ) st.close();
 		}
 		break;
 	    }
@@ -796,9 +803,10 @@ public class SQLCache extends VolatilCache implements Cache {
 
     public void unstoreOntologyNetwork( String uri, BasicOntologyNetwork network ) throws AlignmentException {
 	try {
-	    Statement st = createStatement();
+	    Statement st = null;
 	    String id = stripAlignmentUri( uri );
 	    try {
+		st = createStatement();
 		conn.setAutoCommit( false );
 		st.executeUpdate("DELETE FROM network WHERE id='"+id+"'");
 		st.executeUpdate("DELETE FROM extension WHERE id='"+id+"'");
@@ -809,7 +817,7 @@ public class SQLCache extends VolatilCache implements Cache {
 		throw new AlignmentException( "SQL Exception", sqlex );
 	    } finally {
 		conn.setAutoCommit( false );
-		st.close();
+		if ( st != null ) st.close();
 	    }
 	} catch ( SQLException sqlex ) {
 	    throw new AlignmentException( "Cannot establish SQL Connexion", sqlex );
@@ -911,133 +919,177 @@ public class SQLCache extends VolatilCache implements Cache {
       FOREIGN KEY (dependsOn) REFERENCES alignment (id),
       PRIMARY KEY (id, dependsOn));
 
-      // EDOAL2015:
-
-      
       # dependencies info
 
-      st.executeUpdate("CREATE TABLE edoalexpr (intid BIGINT NOT NULL AUTO_INCREMENT, type INT, joinid BIGINT, PRIMARY KEY (intid))");
-
-      # dependencies info
-
-      st.executeUpdate("CREATE TABLE valueexpr (intid BIGINT NOT NULL AUTO_INCREMENT, type INT, joinid BIGINT, PRIMARY KEY (intid))");
-
+      CREATE TABLE edoalexpr (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      type INT, 
+      joinid BIGINT, 
+      PRIMARY KEY (intid))
 
       # dependencies info
 
-      // EDOAL-INST
-      //-// types id = URI
-      st.executeUpdate("CREATE TABLE instexpr (intid BIGINT NOT NULL AUTO_INCREMENT, uri VARCHAR(250), var VARCHAR(250), PRIMARY KEY (intid))");
-      //-// UNUSED
-      //st.executeUpdate("CREATE TABLE instlist (listid INT NOT NULL, id BIGINT NOT NULL)");
+      CREATE TABLE valueexpr (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      type INT, 
+      joinid BIGINT, 
+      PRIMARY KEY (intid))
 
       # dependencies info
 
-	    // EDOAL-LITERAL
-	    st.executeUpdate("CREATE TABLE literal (intid BIGINT NOT NULL AUTO_INCREMENT, type BIGINT, value VARCHAR(500), PRIMARY KEY (intid))")
+      CREATE TABLE instexpr (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      uri VARCHAR(250), 
+      var VARCHAR(250), 
+      PRIMARY KEY (intid))
 
       # dependencies info
 
-	    //-//
-	    st.executeUpdate("CREATE TABLE typeexpr (intid BIGINT NOT NULL AUTO_INCREMENT, uri VARCHAR(250), PRIMARY KEY (intid))");
+      CREATE TABLE literal (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      type BIGINT, 
+      value VARCHAR(500), 
+      PRIMARY KEY (intid))")
 
       # dependencies info
 
-	    st.executeUpdate("CREATE TABLE apply (intid BIGINT NOT NULL AUTO_INCREMENT, operation VARCHAR(255), PRIMARY KEY (intid))");
+      CREATE TABLE typeexpr (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      uri VARCHAR(250), 
+      PRIMARY KEY (intid))
 
       # dependencies info
 
-	    st.executeUpdate("CREATE TABLE arglist (intid BIGINT NOT NULL, id BIGINT NOT NULL)");
-
-	    // EDOAL-CLASS
-      # dependencies info
-
-	    //-// type = id [ classid ] / and [ classlist] / or [ classlist] / not [ classexpr] / occ-sup / occ-inf / occ-eq / dom / type / value [ classrest ]
+      CREATE TABLE apply (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      operation VARCHAR(255), 
+      PRIMARY KEY (intid))
 
       # dependencies info
 
-	    st.executeUpdate("CREATE TABLE classexpr (intid BIGINT NOT NULL AUTO_INCREMENT, type INT, joinid BIGINT, var VARCHAR(250), PRIMARY KEY (intid))");
-	    //-//
+      CREATE TABLE arglist (
+      intid BIGINT NOT NULL, 
+      id BIGINT NOT NULL)
 
       # dependencies info
 
-	    st.executeUpdate("CREATE TABLE classid (intid BIGINT NOT NULL AUTO_INCREMENT, uri VARCHAR(250), PRIMARY KEY (intid))");
-	    //-// id in classexpr
+      CREATE TABLE classexpr (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      type INT, 
+      joinid BIGINT, 
+      var VARCHAR(250), 
+      PRIMARY KEY (intid))
 
       # dependencies info
 
-	    st.executeUpdate("CREATE TABLE classlist (intid BIGINT NOT NULL, id BIGINT NOT NULL)");
-	    //-// type = occ-sup [ int ] / occ-inf [ int ] / occ-eq [ int ] / type [ classexpr ] / val [ litteral ]
+      CREATE TABLE classid (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      uri VARCHAR(250), 
+      PRIMARY KEY (intid))
 
       # dependencies info
 
-	    st.executeUpdate("CREATE TABLE classrest (intid BIGINT NOT NULL AUTO_INCREMENT, path BIGINT, type INT, joinid BIGINT, var VARCHAR(250), PRIMARY KEY (intid))");
-
-	    // EDOAL-PATH
-      # dependencies info
-
-	    //-// type = val [ literal ] / prop [ propexpr ] / rel [ relexpr ]
-	    st.executeUpdate("CREATE TABLE pathexpr (intid BIGINT NOT NULL AUTO_INCREMENT, type INT, joinid BIGINT, PRIMARY KEY (intid))");
-
-	    // EDOAL-PROP
-      # dependencies info
-
-	    // type = id [ propid ] / and [ proplist] / or [ proplist] / comp [ proplist, relrest ] / not [ propexpr] / dom / type / val [ proprest ]
-	    st.executeUpdate("CREATE TABLE propexpr (intid BIGINT NOT NULL AUTO_INCREMENT, type INT, joinid BIGINT, var VARCHAR(250), PRIMARY KEY (intid))");
+      CREATE TABLE classlist (
+      intid BIGINT NOT NULL, 
+      id BIGINT NOT NULL)
 
       # dependencies info
 
-	    //-//
-	    st.executeUpdate("CREATE TABLE propid (intid BIGINT NOT NULL AUTO_INCREMENT, uri VARCHAR(250), PRIMARY KEY (intid))");
+      CREATE TABLE classrest (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      path BIGINT, 
+      type INT, 
+      joinid BIGINT, 
+      var VARCHAR(250), 
+      PRIMARY KEY (intid))
 
       # dependencies info
 
-	    //-// id in propexpr
-	    st.executeUpdate("CREATE TABLE proplist (intid BIGINT NOT NULL, id BIGINT NOT NULL)");
+      CREATE TABLE pathexpr (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      type INT, 
+      joinid BIGINT, 
+      PRIMARY KEY (intid))
 
       # dependencies info
 
-	    //-// type = dom [ classexpr ] / type [ typeexpr ] / val [ litteral ]
-	    st.executeUpdate("CREATE TABLE valuerest (intid BIGINT NOT NULL AUTO_INCREMENT, type INT, path BIGINT, comp VARCHAR(250), joinid BIGINT, var VARCHAR(250), PRIMARY KEY (intid))");
-
-	    // EDOAL-REL
-      # dependencies info
-
-	    //-// type = id [ relid ] / and [ rellist] / comp [ rellist ] / or [ rellist] / not [ relexpr] / sym [ relexpr] / trans [ relexpr] / refl [ relexpr] / inv [ relexpr ] / dom / cod / val [ relrest ]
-
-      # dependencies info
-
-	    st.executeUpdate("CREATE TABLE relexpr (intid BIGINT NOT NULL AUTO_INCREMENT, type INT, joinid BIGINT, var VARCHAR(250), PRIMARY KEY (intid))");
-	    //-//
+      CREATE TABLE propexpr (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      type INT, 
+      joinid BIGINT, 
+      var VARCHAR(250), 
+      PRIMARY KEY (intid))
 
       # dependencies info
 
-	    st.executeUpdate("CREATE TABLE relid (intid BIGINT NOT NULL AUTO_INCREMENT, uri VARCHAR(250), PRIMARY KEY (intid))");
-	    //-// id in relexpr
+      CREATE TABLE propid (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      uri VARCHAR(250), 
+      PRIMARY KEY (intid))
 
       # dependencies info
 
-	    st.executeUpdate("CREATE TABLE rellist (intid BIGINT NOT NULL, id BIGINT NOT NULL)");
-	    //-// type = dom [ classexpr ] / cod [ classexpr ] / val [ instexpr ] OBSOLETE
-	    //st.executeUpdate("CREATE TABLE relrest (intid BIGINT NOT NULL AUTO_INCREMENT, type INT, joinid BIGINT, var VARCHAR(250), PRIMARY KEY (intid))");
-
-	    // EDOAL-TRANSF
-      # dependencies info
-
-	    // type = o- / -o, looks like the id goes to path?
-	    st.executeUpdate("CREATE TABLE transf (intid BIGINT NOT NULL AUTO_INCREMENT, cellid VARCHAR(255), type INT, joinid1 BIGINT, joinid2 BIGINT, PRIMARY KEY (intid))");
-
-	    // EDOAL-LINKKEY
-      # dependencies info
-
-	    //       FOREIGN KEY (cellid) REFERENCES cell (cell_id),
-	    st.executeUpdate("CREATE TABLE linkkey (intid BIGINT NOT NULL AUTO_INCREMENT, cellid VARCHAR(255), PRIMARY KEY (intid))");
+      CREATE TABLE proplist (
+      intid BIGINT NOT NULL, 
+      id BIGINT NOT NULL)
 
       # dependencies info
 
-	    //-// type = equal / intersect; bind are from path
-	    //       FOREIGN KEY (keyid) REFERENCES linkkey (intid),
-	    st.executeUpdate("CREATE TABLE binding (keyid BIGINT, type INT, joinid1 BIGINT, joinid2 BIGINT)");
+      CREATE TABLE valuerest (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      type INT, 
+      path BIGINT, 
+      comp VARCHAR(250), 
+      joinid BIGINT, 
+      var VARCHAR(250), 
+      PRIMARY KEY (intid))
+
+      # dependencies info
+
+      CREATE TABLE relexpr (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      type INT, 
+      joinid BIGINT, 
+      var VARCHAR(250), 
+      PRIMARY KEY (intid))
+
+      # dependencies info
+
+      CREATE TABLE relid (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      uri VARCHAR(250), 
+      PRIMARY KEY (intid))
+
+      # dependencies info
+
+      CREATE TABLE rellist (
+      intid BIGINT NOT NULL, 
+      id BIGINT NOT NULL)
+
+      # dependencies info
+
+      CREATE TABLE transf (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      cellid VARCHAR(255), 
+      type INT, 
+      joinid1 BIGINT, 
+      joinid2 BIGINT, 
+      PRIMARY KEY (intid))
+
+      # dependencies info
+
+      CREATE TABLE linkkey (
+      intid BIGINT NOT NULL AUTO_INCREMENT, 
+      cellid VARCHAR(255), 
+      PRIMARY KEY (intid))
+
+      # dependencies info
+
+      CREATE TABLE binding (
+      keyid BIGINT, 
+      type INT, 
+      joinid1 BIGINT, 
+      joinid2 BIGINT)
 
     */
 
@@ -1074,33 +1126,38 @@ public class SQLCache extends VolatilCache implements Cache {
     }
 
     public void initEDOALTables( Statement st ) throws SQLException {
-	st.executeUpdate("CREATE TABLE edoalexpr (intid BIGINT NOT NULL AUTO_INCREMENT, type INT, joinid BIGINT, PRIMARY KEY (intid))");
-	st.executeUpdate("CREATE TABLE valueexpr (intid BIGINT NOT NULL AUTO_INCREMENT, type INT, joinid BIGINT, PRIMARY KEY (intid))");
-	st.executeUpdate("CREATE TABLE instexpr (intid BIGINT NOT NULL AUTO_INCREMENT, uri VARCHAR(250), var VARCHAR(250), PRIMARY KEY (intid))");
-	st.executeUpdate("CREATE TABLE literal (intid BIGINT NOT NULL AUTO_INCREMENT, type BIGINT, value VARCHAR(500), PRIMARY KEY (intid))");
-	st.executeUpdate("CREATE TABLE typeexpr (intid BIGINT NOT NULL AUTO_INCREMENT, uri VARCHAR(250), PRIMARY KEY (intid))");
-	st.executeUpdate("CREATE TABLE apply (intid BIGINT NOT NULL AUTO_INCREMENT, operation VARCHAR(255), PRIMARY KEY (intid))");
+	// Bloody incompats
+	String SERIAL = "";
+	if ( service.getPrefix().equals( "jdbc:mysql" ) ) SERIAL = "BIGINT NOT NULL AUTO_INCREMENT";
+	else if ( service.getPrefix().equals( "jdbc:postgresql" ) ) SERIAL = "BIGSERIAL";
+	st.executeUpdate("CREATE TABLE edoalexpr (intid "+SERIAL+", type INT, joinid BIGINT, PRIMARY KEY (intid))");
+	st.executeUpdate("CREATE TABLE valueexpr (intid "+SERIAL+", type INT, joinid BIGINT, PRIMARY KEY (intid))");
+	st.executeUpdate("CREATE TABLE instexpr (intid "+SERIAL+", uri VARCHAR(250), var VARCHAR(250), PRIMARY KEY (intid))");
+	st.executeUpdate("CREATE TABLE literal (intid "+SERIAL+", type BIGINT, value VARCHAR(500), PRIMARY KEY (intid))");
+	st.executeUpdate("CREATE TABLE typeexpr (intid "+SERIAL+", uri VARCHAR(250), PRIMARY KEY (intid))");
+	st.executeUpdate("CREATE TABLE apply (intid "+SERIAL+", operation VARCHAR(255), PRIMARY KEY (intid))");
 	st.executeUpdate("CREATE TABLE arglist (intid BIGINT NOT NULL, id BIGINT NOT NULL)");
-	st.executeUpdate("CREATE TABLE classexpr (intid BIGINT NOT NULL AUTO_INCREMENT, type INT, joinid BIGINT, var VARCHAR(250), PRIMARY KEY (intid))");
-	st.executeUpdate("CREATE TABLE classid (intid BIGINT NOT NULL AUTO_INCREMENT, uri VARCHAR(250), PRIMARY KEY (intid))");
+	st.executeUpdate("CREATE TABLE classexpr (intid "+SERIAL+", type INT, joinid BIGINT, var VARCHAR(250), PRIMARY KEY (intid))");
+	st.executeUpdate("CREATE TABLE classid (intid "+SERIAL+", uri VARCHAR(250), PRIMARY KEY (intid))");
 	st.executeUpdate("CREATE TABLE classlist (intid BIGINT NOT NULL, id BIGINT NOT NULL)");
-	st.executeUpdate("CREATE TABLE classrest (intid BIGINT NOT NULL AUTO_INCREMENT, path BIGINT, type INT, joinid BIGINT, var VARCHAR(250), PRIMARY KEY (intid))");
-	st.executeUpdate("CREATE TABLE pathexpr (intid BIGINT NOT NULL AUTO_INCREMENT, type INT, joinid BIGINT, PRIMARY KEY (intid))");
-	st.executeUpdate("CREATE TABLE propexpr (intid BIGINT NOT NULL AUTO_INCREMENT, type INT, joinid BIGINT, var VARCHAR(250), PRIMARY KEY (intid))");
-	st.executeUpdate("CREATE TABLE propid (intid BIGINT NOT NULL AUTO_INCREMENT, uri VARCHAR(250), PRIMARY KEY (intid))");
+	st.executeUpdate("CREATE TABLE classrest (intid "+SERIAL+", path BIGINT, type INT, joinid BIGINT, var VARCHAR(250), PRIMARY KEY (intid))");
+	st.executeUpdate("CREATE TABLE pathexpr (intid "+SERIAL+", type INT, joinid BIGINT, PRIMARY KEY (intid))");
+	st.executeUpdate("CREATE TABLE propexpr (intid "+SERIAL+", type INT, joinid BIGINT, var VARCHAR(250), PRIMARY KEY (intid))");
+	st.executeUpdate("CREATE TABLE propid (intid "+SERIAL+", uri VARCHAR(250), PRIMARY KEY (intid))");
 	st.executeUpdate("CREATE TABLE proplist (intid BIGINT NOT NULL, id BIGINT NOT NULL)");
-	st.executeUpdate("CREATE TABLE valuerest (intid BIGINT NOT NULL AUTO_INCREMENT, type INT, path BIGINT, comp VARCHAR(250), joinid BIGINT, var VARCHAR(250), PRIMARY KEY (intid))");
-	st.executeUpdate("CREATE TABLE relexpr (intid BIGINT NOT NULL AUTO_INCREMENT, type INT, joinid BIGINT, var VARCHAR(250), PRIMARY KEY (intid))");
-	st.executeUpdate("CREATE TABLE relid (intid BIGINT NOT NULL AUTO_INCREMENT, uri VARCHAR(250), PRIMARY KEY (intid))");
+	st.executeUpdate("CREATE TABLE valuerest (intid "+SERIAL+", type INT, path BIGINT, comp VARCHAR(250), joinid BIGINT, var VARCHAR(250), PRIMARY KEY (intid))");
+	st.executeUpdate("CREATE TABLE relexpr (intid "+SERIAL+", type INT, joinid BIGINT, var VARCHAR(250), PRIMARY KEY (intid))");
+	st.executeUpdate("CREATE TABLE relid (intid "+SERIAL+", uri VARCHAR(250), PRIMARY KEY (intid))");
 	st.executeUpdate("CREATE TABLE rellist (intid BIGINT NOT NULL, id BIGINT NOT NULL)");
-	st.executeUpdate("CREATE TABLE transf (intid BIGINT NOT NULL AUTO_INCREMENT, cellid VARCHAR(255), type INT, joinid1 BIGINT, joinid2 BIGINT, PRIMARY KEY (intid))");
-	st.executeUpdate("CREATE TABLE linkkey (intid BIGINT NOT NULL AUTO_INCREMENT, cellid VARCHAR(255), PRIMARY KEY (intid))");
+	st.executeUpdate("CREATE TABLE transf (intid "+SERIAL+", cellid VARCHAR(255), type INT, joinid1 BIGINT, joinid2 BIGINT, PRIMARY KEY (intid))");
+	st.executeUpdate("CREATE TABLE linkkey (intid "+SERIAL+", cellid VARCHAR(255), PRIMARY KEY (intid))");
 	st.executeUpdate("CREATE TABLE binding (keyid BIGINT NOT NULL, type INT, joinid1 BIGINT, joinid2 BIGINT)");
     }
 
     public void resetDatabase( boolean force ) throws SQLException, AlignmentException {
-	Statement st = createStatement();
+	Statement st = null;
 	try {
+	    st = createStatement();
 	    conn.setAutoCommit( false );
 	    // Check that no one else is connected...
 	    if ( force != true ){
@@ -1156,21 +1213,21 @@ public class SQLCache extends VolatilCache implements Cache {
 	    conn.rollback();
 	    throw sex;
 	} finally {
-	    st.close();
+	    if ( st != null ) st.close();
 	    conn.setAutoCommit( true );
 	}
     }
     
     private void registerServer( String host, String port, Boolean writeable, String prefix ) throws SQLException {
 	// Register *THIS* server, etc. characteristics (incl. version name)
-	PreparedStatement pst = conn.prepareStatement("INSERT INTO server (host, port, edit, version, prefix) VALUES (?,?,?,?,?)");
-	pst.setString(1,host);
-	pst.setString(2,port);
-	pst.setBoolean(3,writeable);
-	pst.setString(4,VERSION+"");
-	pst.setString(5,idprefix);
-	pst.executeUpdate();
-	pst.close();
+	try ( PreparedStatement pst = conn.prepareStatement("INSERT INTO server (host, port, edit, version, prefix) VALUES (?,?,?,?,?)") ) {
+		pst.setString(1,host);
+		pst.setString(2,port);
+		pst.setBoolean(3,writeable);
+		pst.setString(4,VERSION+"");
+		pst.setString(5,idprefix);
+		pst.executeUpdate();
+	    }
     }
 
     /*
@@ -1212,188 +1269,185 @@ public class SQLCache extends VolatilCache implements Cache {
     }
 
     public void updateDatabase() throws SQLException, AlignmentException {
-	Statement st = createStatement();
-	// get the version number (port is the entry which is always here)
-	ResultSet rs = st.executeQuery("SELECT version FROM server WHERE port='port'");
-	rs.next();
-	int version = rs.getInt("version") ;
-	if ( version < VERSION ) {
-	    if ( version >= 302 ) {
-		if ( version < 310 ) {
-		    logger.info( "Upgrading to version 3.1" );
-		    // ALTER database
-		    renameColumn(st,"extension","method","val","VARCHAR(500)");
-		    // case mysql
-		    //st.executeUpdate("ALTER TABLE extension CHANGE method val VARCHAR(500)");
-		   
-		    st.executeUpdate("ALTER TABLE extension ADD uri VARCHAR(200);");
-		    // Modify extensions
-		    ResultSet rse = st.executeQuery("SELECT * FROM extension");
-		    Statement st2 = createStatement();
-		    while ( rse.next() ){
-			String tag = rse.getString("tag");
-			//logger.trace(" Treating tag {} of {}", tag, rse.getString("id"));
-			if ( !tag.equals("") ){
-			    int pos;
-			    String ns;
-			    String name;
-			    if ( (pos = tag.lastIndexOf('#')) != -1 ) {
-				ns = tag.substring( 0, pos );
-				name = tag.substring( pos+1 );
-			    } else if ( (pos = tag.lastIndexOf(':')) != -1 && pos > 5 ) {
-				ns = tag.substring( 0, pos )+"#";
-				name = tag.substring( pos+1 );
-			    } else if ( (pos = tag.lastIndexOf('/')) != -1 ) {
-				ns = tag.substring( 0, pos+1 );
-				name = tag.substring( pos+1 );
-			    } else {
-				ns = Namespace.ALIGNMENT.uri;
-				name = tag;
+	try ( Statement st = createStatement() ) {
+		// get the version number (port is the entry which is always here)
+		ResultSet rs = st.executeQuery("SELECT version FROM server WHERE port='port'");
+		rs.next();
+		int version = rs.getInt("version") ;
+		if ( version < VERSION ) {
+		    if ( version >= 302 ) {
+			if ( version < 310 ) {
+			    logger.info( "Upgrading to version 3.1" );
+			    // ALTER database
+			    renameColumn(st,"extension","method","val","VARCHAR(500)");
+			    // case mysql
+			    //st.executeUpdate("ALTER TABLE extension CHANGE method val VARCHAR(500)");
+			    st.executeUpdate("ALTER TABLE extension ADD uri VARCHAR(200);");
+			    // Modify extensions
+			    ResultSet rse = st.executeQuery("SELECT * FROM extension");
+			    Statement st2 = createStatement();
+			    while ( rse.next() ){
+				String tag = rse.getString("tag");
+				//logger.trace(" Treating tag {} of {}", tag, rse.getString("id"));
+				if ( !tag.equals("") ){
+				    int pos;
+				    String ns;
+				    String name;
+				    if ( (pos = tag.lastIndexOf('#')) != -1 ) {
+					ns = tag.substring( 0, pos );
+					name = tag.substring( pos+1 );
+				    } else if ( (pos = tag.lastIndexOf(':')) != -1 && pos > 5 ) {
+					ns = tag.substring( 0, pos )+"#";
+					name = tag.substring( pos+1 );
+				    } else if ( (pos = tag.lastIndexOf('/')) != -1 ) {
+					ns = tag.substring( 0, pos+1 );
+					name = tag.substring( pos+1 );
+				    } else {
+					ns = Namespace.ALIGNMENT.uri;
+					name = tag;
+				    }
+				    //logger.trace("  >> {} : {}", ns, name);
+				    st2.executeUpdate("UPDATE extension SET tag='"+name+"', uri='"+ns+"' WHERE id='"+rse.getString("id")+"' AND tag='"+tag+"'");
+				}
 			    }
-			    //logger.trace("  >> {} : {}", ns, name);
-			    st2.executeUpdate("UPDATE extension SET tag='"+name+"', uri='"+ns+"' WHERE id='"+rse.getString("id")+"' AND tag='"+tag+"'");
 			}
-		    }
-		}
-		// Nothing to do with 340: subsumed by 400
-		if ( version < 400 ) {
-		    logger.info("Upgrading to version 4.0");
-		    // ALTER database 
-		    changeColumnType(st,"cell","relation", "VARCHAR(255)");
-		    changeColumnType(st,"cell","uri1", "VARCHAR(255)");
-		    changeColumnType(st,"cell","uri2", "VARCHAR(255)");
-		    
-		    changeColumnType(st,"alignment","level", "VARCHAR(255)");
-		    changeColumnType(st,"alignment","uri1", "VARCHAR(255)");
-		    changeColumnType(st,"alignment","uri2", "VARCHAR(255)");
-		    changeColumnType(st,"alignment","file1", "VARCHAR(255)");
-		    changeColumnType(st,"alignment","file2", "VARCHAR(255)");
-		    
-		    renameColumn(st,"alignment","owlontology1","ontology1", "VARCHAR(255)");
-		    renameColumn(st,"alignment","owlontology2","ontology2", "VARCHAR(255)");
-		}
-		if ( version < 450 ) {
-		    logger.info("Upgrading to version 4.5");
-		    logger.info("Creating Ontology table");
-		    st.executeUpdate("CREATE TABLE ontology (id VARCHAR(255), uri VARCHAR(255), source BOOLEAN, file VARCHAR(255), formname VARCHAR(50), formuri VARCHAR(255), primary key (id, source))");
-		    ResultSet rse = st.executeQuery("SELECT * FROM alignment");
-		    while ( rse.next() ){
-			Statement st2 = createStatement();
-			// No Ontology _type_ available then
-		    	st2.executeUpdate("INSERT INTO ontology (id, uri, source, file) VALUES ('"+rse.getString("id")+"','"+rse.getString("uri1")+"','1','"+rse.getString("file1")+"')");
-		    	st2.executeUpdate("INSERT INTO ontology (id, uri, source, file) VALUES ('"+rse.getString("id")+"','"+rse.getString("uri2")+"','0','"+rse.getString("file2")+"')");
-		    }
-		    logger.info("Cleaning up Alignment table");
-		    st.executeUpdate("ALTER TABLE alignment DROP ontology1");  
-		    st.executeUpdate("ALTER TABLE alignment DROP ontology2");  
-		    st.executeUpdate("ALTER TABLE alignment DROP uri1");  
-		    st.executeUpdate("ALTER TABLE alignment DROP uri2");  
-		    st.executeUpdate("ALTER TABLE alignment DROP file1");  
-		    st.executeUpdate("ALTER TABLE alignment DROP file2");  
-		    logger.debug("Altering server table");
-		    st.executeUpdate("ALTER TABLE server ADD prefix VARCHAR(50);");
-		    st.executeUpdate("UPDATE server SET prefix='"+idprefix+"'");
-		    logger.debug("Updating server with prefix");
-		    Statement stmt = null;
-		    try { // In all alignment
-			conn.setAutoCommit( false );
-			stmt = conn.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE,
-						    ResultSet.CONCUR_UPDATABLE);
-			ResultSet uprs = stmt.executeQuery( "SELECT id FROM alignment" );
-			while ( uprs.next() ) {
-			    String oldid = uprs.getString("id");
-			    String newid = stripAlignmentUri( oldid );
-			    //logger.trace("Updating {} to {}", oldid, newid );
-			    uprs.updateString( "id", newid );
-			    uprs.updateRow();
-			    // In all cell (for id and cell_id)
-			    st.executeUpdate("UPDATE cell SET id='"+newid+"' WHERE id='"+oldid+"'" );
-			    // In all extension
-			    st.executeUpdate("UPDATE extension SET id='"+newid+"' WHERE id='"+oldid+"'" );
-			    // In all ontology
-			    st.executeUpdate("UPDATE ontology SET id='"+newid+"' WHERE id='"+oldid+"'" );
+			// Nothing to do with 340: subsumed by 400
+			if ( version < 400 ) {
+			    logger.info("Upgrading to version 4.0");
+			    // ALTER database 
+			    changeColumnType(st,"cell","relation", "VARCHAR(255)");
+			    changeColumnType(st,"cell","uri1", "VARCHAR(255)");
+			    changeColumnType(st,"cell","uri2", "VARCHAR(255)");
+			    
+			    changeColumnType(st,"alignment","level", "VARCHAR(255)");
+			    changeColumnType(st,"alignment","uri1", "VARCHAR(255)");
+			    changeColumnType(st,"alignment","uri2", "VARCHAR(255)");
+			    changeColumnType(st,"alignment","file1", "VARCHAR(255)");
+			    changeColumnType(st,"alignment","file2", "VARCHAR(255)");
+			    
+			    renameColumn(st,"alignment","owlontology1","ontology1", "VARCHAR(255)");
+			    renameColumn(st,"alignment","owlontology2","ontology2", "VARCHAR(255)");
 			}
-			// Now, for each cell, with an id,
-			// either recast the id ... or not
-			conn.commit();
-		    } catch ( SQLException e ) {
-			logger.warn( "IGNORED Failed to update", e );
-		    } finally {
-			if ( stmt != null ) { stmt.close(); }
-			conn.setAutoCommit( true );
-		    }
-		    logger.info("Creating dependency table");
-		    st.executeUpdate("CREATE TABLE dependency (id VARCHAR(255), dependsOn VARCHAR(255))");
-		    logger.info("Fixing legacy errors in cached/stored");
-		    rse = st.executeQuery("SELECT id FROM extension WHERE tag='stored' AND val=''");
-		    Statement st2 = createStatement();
-		    while ( rse.next() ) {
-			ResultSet rse2 = st2.executeQuery("SELECT val FROM extension WHERE tag='stored' AND id='"+rse.getString("id")+"'");
-			if ( rse2.next() ) {
-			    st2.executeUpdate( "UPDATE extension SET val='"+rse2.getString("val")+"' WHERE tag='stored' AND id='"+rse.getString("id")+"'" );
+			if ( version < 450 ) {
+			    logger.info("Upgrading to version 4.5");
+			    logger.info("Creating Ontology table");
+			    st.executeUpdate("CREATE TABLE ontology (id VARCHAR(255), uri VARCHAR(255), source BOOLEAN, file VARCHAR(255), formname VARCHAR(50), formuri VARCHAR(255), primary key (id, source))");
+			    ResultSet rse = st.executeQuery("SELECT * FROM alignment");
+			    while ( rse.next() ){
+				Statement st2 = createStatement();
+				// No Ontology _type_ available then
+				st2.executeUpdate("INSERT INTO ontology (id, uri, source, file) VALUES ('"+rse.getString("id")+"','"+rse.getString("uri1")+"','1','"+rse.getString("file1")+"')");
+				st2.executeUpdate("INSERT INTO ontology (id, uri, source, file) VALUES ('"+rse.getString("id")+"','"+rse.getString("uri2")+"','0','"+rse.getString("file2")+"')");
+			    }
+			    logger.info("Cleaning up Alignment table");
+			    st.executeUpdate("ALTER TABLE alignment DROP ontology1");  
+			    st.executeUpdate("ALTER TABLE alignment DROP ontology2");  
+			    st.executeUpdate("ALTER TABLE alignment DROP uri1");  
+			    st.executeUpdate("ALTER TABLE alignment DROP uri2");  
+			    st.executeUpdate("ALTER TABLE alignment DROP file1");  
+			    st.executeUpdate("ALTER TABLE alignment DROP file2");  
+			    logger.debug("Altering server table");
+			    st.executeUpdate("ALTER TABLE server ADD prefix VARCHAR(50);");
+			    st.executeUpdate("UPDATE server SET prefix='"+idprefix+"'");
+			    logger.debug("Updating server with prefix");
+			    Statement stmt = null;
+			    try { // In all alignment
+				conn.setAutoCommit( false );
+				stmt = conn.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE,
+							    ResultSet.CONCUR_UPDATABLE);
+				ResultSet uprs = stmt.executeQuery( "SELECT id FROM alignment" );
+				while ( uprs.next() ) {
+				    String oldid = uprs.getString("id");
+				    String newid = stripAlignmentUri( oldid );
+				    //logger.trace("Updating {} to {}", oldid, newid );
+				    uprs.updateString( "id", newid );
+				    uprs.updateRow();
+				    // In all cell (for id and cell_id)
+				    st.executeUpdate("UPDATE cell SET id='"+newid+"' WHERE id='"+oldid+"'" );
+				    // In all extension
+				    st.executeUpdate("UPDATE extension SET id='"+newid+"' WHERE id='"+oldid+"'" );
+				    // In all ontology
+				    st.executeUpdate("UPDATE ontology SET id='"+newid+"' WHERE id='"+oldid+"'" );
+				}
+				// Now, for each cell, with an id,
+				// either recast the id ... or not
+				conn.commit();
+			    } catch ( SQLException e ) {
+				logger.warn( "IGNORED Failed to update", e );
+			    } finally {
+				if ( stmt != null ) { stmt.close(); }
+				conn.setAutoCommit( true );
+			    }
+			    logger.info("Creating dependency table");
+			    st.executeUpdate("CREATE TABLE dependency (id VARCHAR(255), dependsOn VARCHAR(255))");
+			    logger.info("Fixing legacy errors in cached/stored");
+			    rse = st.executeQuery("SELECT id FROM extension WHERE tag='stored' AND val=''");
+			    Statement st2 = createStatement();
+			    while ( rse.next() ) {
+				ResultSet rse2 = st2.executeQuery("SELECT val FROM extension WHERE tag='stored' AND id='"+rse.getString("id")+"'");
+				if ( rse2.next() ) {
+				    st2.executeUpdate( "UPDATE extension SET val='"+rse2.getString("val")+"' WHERE tag='stored' AND id='"+rse.getString("id")+"'" );
+				}
+			    }
+			    // This did not worked!
+			    //st.executeUpdate( "UPDATE extension SET val=( SELECT e2.val FROM extension e2 WHERE e2.tag='cached' AND e2.id=extension.id ) WHERE tag='stored' AND val=''" );
+			    // We should also implement a clean up (suppress all starting with http://)
 			}
-		    }
-		    // This did not worked!
-		    //st.executeUpdate( "UPDATE extension SET val=( SELECT e2.val FROM extension e2 WHERE e2.tag='cached' AND e2.id=extension.id ) WHERE tag='stored' AND val=''" );
-		    // We should also implement a clean up (suppress all starting with http://)
-		}
-		if ( version < 465 ) { // Unfortunately 4.7 was released with 465 tag...
-		    logger.info("Upgrading to version 4.7");
-		    logger.info("Updating Alignment table");
-		    st.executeUpdate("ALTER TABLE alignment ADD onto1 VARCHAR(255);");
-		    st.executeUpdate("ALTER TABLE alignment ADD onto2 VARCHAR(255);");
-		    ResultSet rse = st.executeQuery("SELECT uri,id,source FROM ontology");
-		    Statement st2 = createStatement();
-		    while ( rse.next() ){
-			if ( rse.getBoolean("source") ) {
-			    st2.executeUpdate("UPDATE alignment SET onto1='"+rse.getString("uri")+"' WHERE id='"+rse.getString("id")+"'");
-			} else {
-			    st2.executeUpdate("UPDATE alignment SET onto2='"+rse.getString("uri")+"' WHERE id='"+rse.getString("id")+"'");
+			if ( version < 465 ) { // Unfortunately 4.7 was released with 465 tag...
+			    logger.info("Upgrading to version 4.7");
+			    logger.info("Updating Alignment table");
+			    st.executeUpdate("ALTER TABLE alignment ADD onto1 VARCHAR(255);");
+			    st.executeUpdate("ALTER TABLE alignment ADD onto2 VARCHAR(255);");
+			    ResultSet rse = st.executeQuery("SELECT uri,id,source FROM ontology");
+			    Statement st2 = createStatement();
+			    while ( rse.next() ){
+				if ( rse.getBoolean("source") ) {
+				    st2.executeUpdate("UPDATE alignment SET onto1='"+rse.getString("uri")+"' WHERE id='"+rse.getString("id")+"'");
+				} else {
+				    st2.executeUpdate("UPDATE alignment SET onto2='"+rse.getString("uri")+"' WHERE id='"+rse.getString("id")+"'");
+				}
+			    }
+			    logger.info("Cleaning up ontology table");
+			    st.executeUpdate("ALTER TABLE ontology RENAME TO oldont;");
+			    st.executeUpdate("CREATE TABLE ontology (uri VARCHAR(255), formname VARCHAR(50), formuri VARCHAR(255), file VARCHAR(255), PRIMARY KEY (uri))");
+			    st.executeUpdate("INSERT INTO ontology SELECT DISTINCT uri FROM oldont;");
+			    st.executeUpdate("UPDATE ontology SET formname=oldont.formname, formuri=oldont.formuri, file=oldont.file FROM oldont WHERE ontology.uri = oldont.uri");
+			    st.executeUpdate("DROP TABLE oldont;");
+			    logger.info("Creating network tables");
+			    st.executeUpdate("CREATE TABLE network (id VARCHAR(100), PRIMARY KEY (id))");
+			    st.executeUpdate("CREATE TABLE networkontology (network VARCHAR(100), onto VARCHAR(255), FOREIGN KEY (network) REFERENCES network (id), FOREIGN KEY (onto) REFERENCES ontology (uri), PRIMARY KEY (network,onto))");
+			    st.executeUpdate("CREATE TABLE networkalignment (network VARCHAR(100), align VARCHAR(100), FOREIGN KEY (network) REFERENCES network (id), FOREIGN KEY (align) REFERENCES alignment (id), PRIMARY KEY (network,align))");
+			    // CREATE PRIMARY AND FOREIGN KEYS
+			    logger.info("Adding foreign keys");
+			    // suppress orphean cells (the reciprocal would delete empty alignments)
+			    st.executeUpdate("DELETE FROM cell WHERE id NOT IN (SELECT al.id FROM alignment al)");
+			    st.executeUpdate("ALTER TABLE cell ADD CONSTRAINT cellid FOREIGN KEY (id) REFERENCES alignment (id);");
+			    st.executeUpdate("ALTER TABLE dependency ADD CONSTRAINT deppk PRIMARY KEY (id,dependsOn);");
+			    st.executeUpdate("ALTER TABLE dependency ADD CONSTRAINT depalfk FOREIGN KEY (id) REFERENCES alignment (id);");
+			    st.executeUpdate("ALTER TABLE dependency ADD CONSTRAINT aldepfk FOREIGN KEY (dependsOn) REFERENCES alignment (id);");
+			    st.executeUpdate("ALTER TABLE alignment ADD CONSTRAINT alon1fk FOREIGN KEY (onto1) REFERENCES ontology (uri);");
+			    st.executeUpdate("ALTER TABLE alignment ADD CONSTRAINT alon2fk FOREIGN KEY (onto2) REFERENCES ontology (uri);");
+			    //This was already the primary key
+			    //st.executeUpdate("ALTER TABLE alignment ADD CONSTRAINT PRIMARY KEY (id);");
+			    // ADDED TABLE FOR MULTIPLE URIs
+			    // URIINdex:
+			    logger.info("Creating URI index table");
+			    st.executeUpdate("CREATE TABLE alignmenturis (id varchar(100), uri varchar(255), prefered boolean);");
+			    // CHANGE EXTENSION NAMESPACE
+			    logger.info("Changing extension namespaces");
+			    // Normalise
+			    st2.executeUpdate("UPDATE extension SET uri='"+Namespace.ALIGNMENT.uri+"#' WHERE uri='"+Namespace.ALIGNMENT.uri+"'");
+			    st2.executeUpdate("UPDATE extension SET uri='"+Namespace.EXT.uri+"' WHERE uri='"+Namespace.ALIGNMENT.uri+"#' AND (tag='time' OR tag='method' OR tag='pretty')");
 			}
-		    }
-		    logger.info("Cleaning up ontology table");
-		    st.executeUpdate("ALTER TABLE ontology RENAME TO oldont;");
-		    st.executeUpdate("CREATE TABLE ontology (uri VARCHAR(255), formname VARCHAR(50), formuri VARCHAR(255), file VARCHAR(255), PRIMARY KEY (uri))");
-		    st.executeUpdate("INSERT INTO ontology SELECT DISTINCT uri FROM oldont;");
-		    st.executeUpdate("UPDATE ontology SET formname=oldont.formname, formuri=oldont.formuri, file=oldont.file FROM oldont WHERE ontology.uri = oldont.uri");
-		    st.executeUpdate("DROP TABLE oldont;");
-		    logger.info("Creating network tables");
-		    st.executeUpdate("CREATE TABLE network (id VARCHAR(100), PRIMARY KEY (id))");
-		    st.executeUpdate("CREATE TABLE networkontology (network VARCHAR(100), onto VARCHAR(255), FOREIGN KEY (network) REFERENCES network (id), FOREIGN KEY (onto) REFERENCES ontology (uri), PRIMARY KEY (network,onto))");
-		    st.executeUpdate("CREATE TABLE networkalignment (network VARCHAR(100), align VARCHAR(100), FOREIGN KEY (network) REFERENCES network (id), FOREIGN KEY (align) REFERENCES alignment (id), PRIMARY KEY (network,align))");
-		    // CREATE PRIMARY AND FOREIGN KEYS
-		    logger.info("Adding foreign keys");
-		    // suppress orphean cells (the reciprocal would delete empty alignments)
-		    st.executeUpdate("DELETE FROM cell WHERE id NOT IN (SELECT al.id FROM alignment al)");
-		    st.executeUpdate("ALTER TABLE cell ADD CONSTRAINT cellid FOREIGN KEY (id) REFERENCES alignment (id);");
-		    st.executeUpdate("ALTER TABLE dependency ADD CONSTRAINT deppk PRIMARY KEY (id,dependsOn);");
-		    st.executeUpdate("ALTER TABLE dependency ADD CONSTRAINT depalfk FOREIGN KEY (id) REFERENCES alignment (id);");
-		    st.executeUpdate("ALTER TABLE dependency ADD CONSTRAINT aldepfk FOREIGN KEY (dependsOn) REFERENCES alignment (id);");
-		    st.executeUpdate("ALTER TABLE alignment ADD CONSTRAINT alon1fk FOREIGN KEY (onto1) REFERENCES ontology (uri);");
-		    st.executeUpdate("ALTER TABLE alignment ADD CONSTRAINT alon2fk FOREIGN KEY (onto2) REFERENCES ontology (uri);");
-		    //This was already the primary key
-		    //st.executeUpdate("ALTER TABLE alignment ADD CONSTRAINT PRIMARY KEY (id);");
-		    // ADDED TABLE FOR MULTIPLE URIs
-		    // URIINdex:
-		    logger.info("Creating URI index table");
-		    st.executeUpdate("CREATE TABLE alignmenturis (id varchar(100), uri varchar(255), prefered boolean);");
-		    // CHANGE EXTENSION NAMESPACE
-		    logger.info("Changing extension namespaces");
-		    // Normalise
-		    st2.executeUpdate("UPDATE extension SET uri='"+Namespace.ALIGNMENT.uri+"#' WHERE uri='"+Namespace.ALIGNMENT.uri+"'");
-		    st2.executeUpdate("UPDATE extension SET uri='"+Namespace.EXT.uri+"' WHERE uri='"+Namespace.ALIGNMENT.uri+"#' AND (tag='time' OR tag='method' OR tag='pretty')");
+			if ( version < 471 ) { // EDOAL2015:
+			    logger.info("Upgrading to version 4.71");
+			    logger.info("Creating EDOAL tables");
+			    initEDOALTables( createStatement() );
+			}
+			// ALTER version
+			st.executeUpdate("UPDATE server SET version='"+VERSION+"'");
+		    } else throw new AlignmentException( "Database must be upgraded ("+version+" -> "+VERSION+")" );
 		}
-		if ( version < 471 ) { // EDOAL2015:
-		    logger.info("Upgrading to version 4.71");
-		    logger.info("Creating EDOAL tables");
-		    initEDOALTables( createStatement() );
-		}
-		// ALTER version
-		st.executeUpdate("UPDATE server SET version='"+VERSION+"'");
-	    } else {
-		throw new AlignmentException( "Database must be upgraded ("+version+" -> "+VERSION+")" );
 	    }
-	}
-	st.close();
     }    
 }
