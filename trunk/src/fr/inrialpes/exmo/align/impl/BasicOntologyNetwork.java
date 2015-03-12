@@ -128,6 +128,17 @@ public class BasicOntologyNetwork implements OntologyNetwork, Extensible {
 	alignments.remove( al );
 	onto2Align.get(al.getOntology1URI()).get(al.getOntology2URI()).remove(al);
     };
+    public void cleanUpAlignments() {
+	for ( OntologyTriple ot : ontologies.values() ) {
+	    ot.cleanUpAlignments();
+	}
+	alignments.clear();
+	for ( Map<URI,Set<Alignment>> m : onto2Align.values() ) {
+	    for ( Set<Alignment> s : m.values() ) {
+		s.clear();
+	    }
+	}
+    };
     public Set<Alignment> getAlignments(){
 	return alignments;
     };
@@ -575,6 +586,11 @@ class OntologyTriple {
 	onto = o;
 	targettingAlignments = new HashSet<Alignment>();
 	sourceAlignments = new HashSet<Alignment>();
+    }
+
+    public void cleanUpAlignments() {
+	targettingAlignments.clear();
+	sourceAlignments.clear();
     }
 }
 
