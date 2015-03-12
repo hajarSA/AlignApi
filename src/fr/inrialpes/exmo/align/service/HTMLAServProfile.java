@@ -1,7 +1,7 @@
 /*
  * $Id$
  *
- * Copyright (C) INRIA, 2006-2014
+ * Copyright (C) INRIA, 2006-2015
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -456,7 +456,7 @@ public class HTMLAServProfile implements AlignmentServiceProfile {
 		msg += " value=\""+ont+"\">"+ont+"</option>"; //simplify
 	    }
 	    msg += "</select>";
-	    msg += "&nbsp;<input type=\"submit\" value=\"Restrict\"/></form><ul compact=\"1\">";
+	    msg += "&nbsp;<input type=\"submit\" value=\"Restrict\"/></form>";
 	    // would be better as a JavaScript which updates
 	    Collection<Alignment> alignments = null;
 	    if ( uri1 == null && uri2 == null ) {
@@ -464,16 +464,19 @@ public class HTMLAServProfile implements AlignmentServiceProfile {
 	    } else {
 		alignments = manager.alignments( uri1, uri2 );
 	    }
-
-	    for ( Alignment al : alignments ) {
-		String id = al.getExtension( Namespace.ALIGNMENT.uri, Annotations.ID );
-		String pid = al.getExtension( Namespace.EXT.uri, Annotations.PRETTY );
-		if ( pid == null ) pid = id; else pid = id+" ("+pid+")";
-		//msg += "<li><a href=\"../html/retrieve?method=fr.inrialpes.exmo.align.impl.renderer.HTMLRendererVisitor&id="+id+"\">"+pid+"</a></li>";
-		msg += "<li><a href=\""+id+"\">"+pid+"</a></li>";
+	    if ( alignments == null ) {
+		msg += "<p>No alignment matches these ontologies</p>";
+	    } else {
+		msg += "<ul compact=\"1\">";
+		for ( Alignment al : alignments ) {
+		    String id = al.getExtension( Namespace.ALIGNMENT.uri, Annotations.ID );
+		    String pid = al.getExtension( Namespace.EXT.uri, Annotations.PRETTY );
+		    if ( pid == null ) pid = id; else pid = id+" ("+pid+")";
+		    //msg += "<li><a href=\"../html/retrieve?method=fr.inrialpes.exmo.align.impl.renderer.HTMLRendererVisitor&id="+id+"\">"+pid+"</a></li>";
+		    msg += "<li><a href=\""+id+"\">"+pid+"</a></li>";
+		}
+		msg += "</ul>";
 	    }
-	    msg += "</ul>";
-	    
 	} else if ( perf.equals("manalignments") ){ // Manage alignments
 	    msg = "<h1>Available alignments</h1><ul compact=\"1\">";
 	    for ( Alignment al : manager.alignments() ) {
