@@ -332,17 +332,17 @@ public class BasicAlignment implements Alignment, Extensible {
 	}
     }
 
-    public Set<Cell> getAlignCells1(Object ob) throws AlignmentException {
+    public Set<Cell> getAlignCells1( Object ob ) throws AlignmentException {
 	return hash1.get( ob );
     }
-    public Set<Cell> getAlignCells2(Object ob) throws AlignmentException {
+    public Set<Cell> getAlignCells2( Object ob ) throws AlignmentException {
 	return hash2.get( ob );
     }
 
     /*
      * @deprecated implemented as the one retrieving the highest strength correspondence
      */
-    public Cell getAlignCell1(Object ob) throws AlignmentException {
+    public Cell getAlignCell1( Object ob ) throws AlignmentException {
 	if ( Annotations.STRICT_IMPLEMENTATION == true ){
 	    throw new AlignmentException("getAlignCell1: deprecated (use getAlignCells1 instead)");
 	} else {
