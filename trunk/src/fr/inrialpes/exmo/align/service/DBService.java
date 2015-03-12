@@ -2,7 +2,7 @@
  * $Id$
  *
  * Copyright (C) Seungkeun Lee, 2006
- * Copyright (C) INRIA, 2014
+ * Copyright (C) INRIA, 2014-2015
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -34,5 +34,6 @@ public interface DBService {
     public void connect(String IPAdress, String port, String user, String password, String database) throws SQLException;    // with userID, password in database
     public Connection getConnection() throws SQLException;
     public Connection reconnect() throws SQLException;
+    public String getPrefix();
     public void close();
 }

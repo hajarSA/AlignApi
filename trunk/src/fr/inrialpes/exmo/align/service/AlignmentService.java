@@ -145,11 +145,11 @@ public class AlignmentService extends CommonCLI {
 	if ( DBMS.equals("postgres") ) {
 	    logger.debug("postgres driver");
 	    if ( DBPORT == null ) DBPORT = "5432";
-	    connection = new DBServiceImpl( "org.postgresql.Driver",  "jdbc:postgresql", DBPORT );
+	    connection = new DBServiceImpl( "org.postgresql.Driver", "jdbc:postgresql", DBPORT );
 	} else if ( DBMS.equals("mysql") ) {
 	    logger.debug("mysql driver");
 	    if ( DBPORT == null ) DBPORT = "3306";
-	    connection = new DBServiceImpl( "com.mysql.jdbc.Driver",  "jdbc:mysql", DBPORT );
+	    connection = new DBServiceImpl( "com.mysql.jdbc.Driver", "jdbc:mysql", DBPORT );
 	} else {
 	    logger.error( "Unsupported JDBC driver: {}", DBMS );
 	    usage();

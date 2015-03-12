@@ -2,7 +2,7 @@
  * $Id$
  *
  * Copyright (C) Seungkeun Lee, 2006
- * Copyright (C) INRIA, 2007-2009, 2013-2014
+ * Copyright (C) INRIA, 2007-2009, 2013-2015
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -56,6 +56,10 @@ public class DBServiceImpl implements DBService {
 	Class.forName(driver).newInstance();
 	driverPrefix = prefix;
 	port = DBPort;
+    }
+
+    public String getPrefix() {
+	return driverPrefix;
     }
 
     public void init() {
